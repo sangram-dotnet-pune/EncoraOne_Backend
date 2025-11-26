@@ -36,6 +36,40 @@ namespace EncoraOne.Grievance.API.Controllers
             }
         }
 
+        // NEW: Edit Endpoint
+        [HttpPut("{id}")]
+        [Authorize(Roles = "Employee")]
+        public async Task<IActionResult> EditComplaint(int id, [FromBody] CreateComplaintDto editDto)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                await _complaintService.EditComplaintAsync(id, editDto, userId);
+                return Ok(new { message = "Complaint updated successfully" });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        // NEW: Cancel Endpoint
+        [HttpDelete("{id}")]
+        [Authorize(Roles = "Employee")]
+        public async Task<IActionResult> CancelComplaint(int id)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                await _complaintService.CancelComplaintAsync(id, userId);
+                return Ok(new { message = "Complaint cancelled successfully" });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
         [HttpGet("my-complaints")]
         [Authorize(Roles = "Employee")]
         public async Task<IActionResult> GetMyComplaints()
@@ -53,7 +87,6 @@ namespace EncoraOne.Grievance.API.Controllers
             return Ok(result);
         }
 
-        // NEW: Admin only endpoint to see everything
         [HttpGet("all")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> GetAllComplaints()
@@ -69,7 +102,7 @@ namespace EncoraOne.Grievance.API.Controllers
             try
             {
                 var managerId = GetCurrentUserId();
-                var result = await _complaintService.UpdateComplaintStatusAsync(updateDto, managerId);
+                await _complaintService.UpdateComplaintStatusAsync(updateDto, managerId);
                 return Ok(new { message = "Status updated successfully" });
             }
             catch (Exception ex)

@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
 using EncoraOne.Grievance.API.DTOs;
 using EncoraOne.Grievance.API.Models;
@@ -54,7 +53,6 @@ namespace EncoraOne.Grievance.API.Services.Implementations
             return await MapList(complaints);
         }
 
-        // NEW: Implementation for Admin to see everything
         public async Task<IEnumerable<ComplaintResponseDto>> GetAllComplaintsAsync()
         {
             var complaints = await _unitOfWork.Complaints.GetAllAsync();
@@ -69,8 +67,6 @@ namespace EncoraOne.Grievance.API.Services.Implementations
             var manager = await _unitOfWork.Managers.GetByIdAsync(managerId);
             if (manager == null) throw new Exception("Manager not found");
 
-            // Allow Admin (Role 1) OR Matching Department Manager
-            // Note: Assuming Admin Role Enum value is 1
             if (manager.Role != UserRole.Admin && manager.DepartmentId != complaint.DepartmentId)
             {
                 throw new Exception("You are not authorized to manage complaints for this department.");
@@ -85,6 +81,46 @@ namespace EncoraOne.Grievance.API.Services.Implementations
             _unitOfWork.Complaints.Update(complaint);
             await _unitOfWork.CompleteAsync();
 
+            return true;
+        }
+
+        // NEW: Edit Complaint Logic
+        public async Task<bool> EditComplaintAsync(int complaintId, CreateComplaintDto editDto, int employeeId)
+        {
+            var complaint = await _unitOfWork.Complaints.GetByIdAsync(complaintId);
+            if (complaint == null) throw new Exception("Complaint not found");
+
+            if (complaint.EmployeeId != employeeId) throw new Exception("Unauthorized");
+
+            // Strict Rule: Can only edit if Pending
+            if (complaint.Status != ComplaintStatus.Pending)
+                throw new Exception("Cannot edit complaint. It is already being processed.");
+
+            complaint.Title = editDto.Title;
+            complaint.Description = editDto.Description;
+            complaint.DepartmentId = editDto.DepartmentId;
+            // Note: We update createdAt to show it was modified, or keep original. Let's keep original.
+
+            _unitOfWork.Complaints.Update(complaint);
+            await _unitOfWork.CompleteAsync();
+            return true;
+        }
+
+        // NEW: Cancel Complaint Logic
+        public async Task<bool> CancelComplaintAsync(int complaintId, int employeeId)
+        {
+            var complaint = await _unitOfWork.Complaints.GetByIdAsync(complaintId);
+            if (complaint == null) throw new Exception("Complaint not found");
+
+            if (complaint.EmployeeId != employeeId) throw new Exception("Unauthorized");
+
+            if (complaint.Status != ComplaintStatus.Pending)
+                throw new Exception("Cannot cancel complaint. It is already being processed.");
+
+            complaint.Status = ComplaintStatus.Cancelled; // Enum 4
+
+            _unitOfWork.Complaints.Update(complaint);
+            await _unitOfWork.CompleteAsync();
             return true;
         }
 

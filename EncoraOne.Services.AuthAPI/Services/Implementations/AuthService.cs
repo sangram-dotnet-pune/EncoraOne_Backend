@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IdentityModel.Tokens.Jwt;
-using System.Linq; // Added for Linq
+using System.Linq;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
@@ -42,7 +42,7 @@ namespace EncoraOne.Grievance.API.Services.Implementations
 
             if (registerDto.Role == UserRole.Manager)
             {
-                if (!registerDto.DepartmentId.HasValue)
+                if (!registerDto.DepartmentId.HasValue) 
                     throw new Exception("Department ID is required for Managers.");
 
                 newUser = new Manager
@@ -57,7 +57,7 @@ namespace EncoraOne.Grievance.API.Services.Implementations
                     JobTitle = registerDto.JobTitle ?? "Staff"
                 };
             }
-            else
+            else 
             {
                 newUser = new Manager { DepartmentId = 1 }; // Admin default
             }
@@ -70,7 +70,7 @@ namespace EncoraOne.Grievance.API.Services.Implementations
 
             if (newUser is Manager m) await _unitOfWork.Managers.AddAsync(m);
             else if (newUser is Employee e) await _unitOfWork.Employees.AddAsync(e);
-
+            
             await _unitOfWork.CompleteAsync();
 
             return GenerateTokenResponse(newUser);
@@ -125,17 +125,17 @@ namespace EncoraOne.Grievance.API.Services.Implementations
         {
             var tokenHandler = new JwtSecurityTokenHandler();
             var key = Encoding.ASCII.GetBytes(_configuration["JwtSettings:Key"]);
-
-            // Get Dept ID if Manager
+            
             int? deptId = (user as Manager)?.DepartmentId;
 
             var claims = new List<Claim>
             {
                 new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
                 new Claim(ClaimTypes.Email, user.Email),
-                // Add BOTH standard role claim types to be safe
-                new Claim(ClaimTypes.Role, user.Role.ToString()),
-                new Claim("role", user.Role.ToString())
+                // FIX: Add Name Claim so it persists in Token
+                new Claim(ClaimTypes.Name, user.FullName), 
+                new Claim(ClaimTypes.Role, user.Role.ToString()), 
+                new Claim("role", user.Role.ToString()) 
             };
 
             if (deptId.HasValue)
