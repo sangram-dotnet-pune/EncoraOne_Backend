@@ -5,16 +5,20 @@ using EncoraOne.Grievance.API.DTOs;
 using EncoraOne.Grievance.API.Models;
 using EncoraOne.Grievance.API.Repositories.Interfaces;
 using EncoraOne.Grievance.API.Services.Interfaces;
+using Microsoft.AspNetCore.SignalR;
+using EncoraOne.Grievance.API.Hubs;
 
 namespace EncoraOne.Grievance.API.Services.Implementations
 {
     public class ComplaintService : IComplaintService
     {
         private readonly IUnitOfWork _unitOfWork;
+        private readonly IHubContext<NotificationHub> _hubContext;
 
-        public ComplaintService(IUnitOfWork unitOfWork)
+        public ComplaintService(IUnitOfWork unitOfWork, IHubContext<NotificationHub> hubContext)
         {
             _unitOfWork = unitOfWork;
+            _hubContext = hubContext;
         }
 
         public async Task<ComplaintResponseDto> CreateComplaintAsync(CreateComplaintDto createDto, int employeeId)
@@ -37,6 +41,9 @@ namespace EncoraOne.Grievance.API.Services.Implementations
             await _unitOfWork.CompleteAsync();
 
             var employee = await _unitOfWork.Employees.GetByIdAsync(employeeId);
+
+            // Notify Managers
+            await _hubContext.Clients.All.SendAsync("ReceiveNotification", $"New Grievance: {complaint.Title} submitted to {department.Name}.");
 
             return MapToResponse(complaint, department.Name, employee.FullName);
         }
@@ -68,10 +75,9 @@ namespace EncoraOne.Grievance.API.Services.Implementations
             if (manager == null) throw new Exception("Manager not found");
 
             if (manager.Role != UserRole.Admin && manager.DepartmentId != complaint.DepartmentId)
-            {
-                throw new Exception("You are not authorized to manage complaints for this department.");
-            }
+                throw new Exception("Unauthorized");
 
+            var oldStatus = complaint.Status;
             complaint.Status = updateDto.Status;
             complaint.ManagerRemarks = updateDto.Remarks;
 
@@ -81,44 +87,39 @@ namespace EncoraOne.Grievance.API.Services.Implementations
             _unitOfWork.Complaints.Update(complaint);
             await _unitOfWork.CompleteAsync();
 
+            // === NOTIFICATION TRIGGER ===
+            await _hubContext.Clients.All.SendAsync("ReceiveNotification",
+                $"Update: Complaint #{complaint.ComplaintId} status changed from {oldStatus} to {complaint.Status}.");
+
             return true;
         }
 
-        // NEW: Edit Complaint Logic
         public async Task<bool> EditComplaintAsync(int complaintId, CreateComplaintDto editDto, int employeeId)
         {
             var complaint = await _unitOfWork.Complaints.GetByIdAsync(complaintId);
-            if (complaint == null) throw new Exception("Complaint not found");
+            if (complaint == null || complaint.EmployeeId != employeeId) throw new Exception("Unauthorized or Not Found");
 
-            if (complaint.EmployeeId != employeeId) throw new Exception("Unauthorized");
-
-            // Strict Rule: Can only edit if Pending
             if (complaint.Status != ComplaintStatus.Pending)
-                throw new Exception("Cannot edit complaint. It is already being processed.");
+                throw new Exception("Cannot edit processed complaint.");
 
             complaint.Title = editDto.Title;
             complaint.Description = editDto.Description;
             complaint.DepartmentId = editDto.DepartmentId;
-            // Note: We update createdAt to show it was modified, or keep original. Let's keep original.
 
             _unitOfWork.Complaints.Update(complaint);
             await _unitOfWork.CompleteAsync();
             return true;
         }
 
-        // NEW: Cancel Complaint Logic
         public async Task<bool> CancelComplaintAsync(int complaintId, int employeeId)
         {
             var complaint = await _unitOfWork.Complaints.GetByIdAsync(complaintId);
-            if (complaint == null) throw new Exception("Complaint not found");
-
-            if (complaint.EmployeeId != employeeId) throw new Exception("Unauthorized");
+            if (complaint == null || complaint.EmployeeId != employeeId) throw new Exception("Unauthorized or Not Found");
 
             if (complaint.Status != ComplaintStatus.Pending)
-                throw new Exception("Cannot cancel complaint. It is already being processed.");
+                throw new Exception("Cannot cancel processed complaint.");
 
-            complaint.Status = ComplaintStatus.Cancelled; // Enum 4
-
+            complaint.Status = ComplaintStatus.Cancelled;
             _unitOfWork.Complaints.Update(complaint);
             await _unitOfWork.CompleteAsync();
             return true;

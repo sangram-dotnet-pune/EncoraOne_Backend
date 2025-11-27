@@ -5,6 +5,7 @@ using EncoraOne.Grievance.API.Repositories.Implementations;
 using EncoraOne.Grievance.API.Repositories.Interfaces;
 using EncoraOne.Grievance.API.Services.Implementations;
 using EncoraOne.Grievance.API.Services.Interfaces;
+using EncoraOne.Grievance.API.Hubs; // Import Hub Namespace
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -12,35 +13,31 @@ using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ==============================================
-// 1. Database Configuration
-// ==============================================
+// 1. DB Context
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// ==============================================
-// 2. Dependency Injection (DI) Container
-// ==============================================
+// 2. Add SignalR
+builder.Services.AddSignalR();
+
+// 3. Dependency Injection
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IComplaintService, ComplaintService>();
 
-// ==============================================
-// 3. CORS Configuration (FIX FOR YOUR ERROR)
-// ==============================================
+// 4. CORS (Allow Credentials for SignalR)
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowReactApp", policy =>
     {
-        policy.WithOrigins("http://localhost:5173") // Allow your Frontend URL
-              .AllowAnyMethod()                     // Allow GET, POST, PUT, DELETE
-              .AllowAnyHeader();                    // Allow Content-Type, Authorization
+        policy.WithOrigins("http://localhost:5173")
+              .AllowAnyMethod()
+              .AllowAnyHeader()
+              .AllowCredentials(); // Required for SignalR
     });
 });
 
-// ==============================================
-// 4. Authentication & JWT Configuration
-// ==============================================
+// 5. Auth Config
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var key = Encoding.ASCII.GetBytes(jwtSettings["Key"]);
 
@@ -65,51 +62,16 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
-// ==============================================
-// 5. Controller Configuration
-// ==============================================
-builder.Services.AddControllers()
-    .AddJsonOptions(options =>
-    {
-        options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
-        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
-    });
-
-// ==============================================
-// 6. Swagger Configuration
-// ==============================================
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(c =>
+builder.Services.AddControllers().AddJsonOptions(options =>
 {
-    c.SwaggerDoc("v1", new OpenApiInfo { Title = "EncoraOne API", Version = "v1" });
-    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
-    {
-        Description = "JWT Authorization header using the Bearer scheme. Enter 'Bearer' [space] and then your token.",
-        Name = "Authorization",
-        In = ParameterLocation.Header,
-        Type = SecuritySchemeType.ApiKey,
-        Scheme = "Bearer"
-    });
-    c.AddSecurityRequirement(new OpenApiSecurityRequirement()
-    {
-        {
-            new OpenApiSecurityScheme
-            {
-                Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" },
-                Scheme = "oauth2",
-                Name = "Bearer",
-                In = ParameterLocation.Header,
-            },
-            new List<string>()
-        }
-    });
+    options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
+    options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
 });
 
-var app = builder.Build();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
 
-// ==============================================
-// 7. HTTP Request Pipeline
-// ==============================================
+var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
 {
@@ -119,12 +81,13 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-// IMPORTANT: UseCors must be placed BEFORE UseAuthentication and UseAuthorization
+// IMPORTANT: Apply CORS before Hub Mapping
 app.UseCors("AllowReactApp");
 
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHub<NotificationHub>("/notificationHub"); // Map the Hub
 
 app.Run();
