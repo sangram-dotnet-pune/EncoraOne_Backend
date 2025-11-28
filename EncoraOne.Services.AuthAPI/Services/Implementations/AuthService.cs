@@ -42,14 +42,16 @@ namespace EncoraOne.Grievance.API.Services.Implementations
 
             if (registerDto.Role == UserRole.Manager)
             {
-                if (!registerDto.DepartmentId.HasValue) 
+                if (!registerDto.DepartmentId.HasValue)
                     throw new Exception("Department ID is required for Managers.");
 
                 newUser = new Manager
                 {
-                    DepartmentId = registerDto.DepartmentId.Value
+                    DepartmentId = registerDto.DepartmentId.Value,
+                    JobTitle = registerDto.JobTitle ?? "Manager"
                 };
             }
+
             else if (registerDto.Role == UserRole.Employee)
             {
                 newUser = new Employee
