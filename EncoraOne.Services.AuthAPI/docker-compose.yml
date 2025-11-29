@@ -3,11 +3,11 @@ version: '3.9'
 services:
 
   db:
-    image: mcr.microsoft.com/azure-sql-edge
-    platform: linux/arm64
+    image: postgres:latest
     environment:
-      SA_PASSWORD: ${SA_PASSWORD}
-      ACCEPT_EULA: Y
+      POSTGRES_USER: sa
+      POSTGRES_PASSWORD: ${SA_PASSWORD}  # <- make sure this matches your .env
+      POSTGRES_DB: EncoraOneGrievanceDB
     ports:
       - "1433:1433"
     
@@ -17,7 +17,7 @@ services:
     build:
       context: .
     ports:
-      - "5001:5001"
+      - "1433:5432"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__DefaultConnection: Server=db,1433;Database=EncoraOneGrievanceDB;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True;
