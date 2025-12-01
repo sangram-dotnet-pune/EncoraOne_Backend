@@ -3,24 +3,26 @@ version: '3.9'
 services:
 
   db:
-    image: mcr.microsoft.com/azure-sql-edge
-    platform: linux/arm64
+    image: postgres:latest
+    container_name: encoraone_postgres
     environment:
-      SA_PASSWORD: ${SA_PASSWORD}
-      ACCEPT_EULA: Y
+      POSTGRES_USER: sa
+      POSTGRES_PASSWORD: ${SA_PASSWORD}
+      POSTGRES_DB: EncoraOneGrievanceDB
     ports:
-      - "1433:1433"
-    
-    restart: unless-stopped
+      - "5432:5432"
+
 
   grievance_api:
     build:
       context: .
+    container_name: grievance_api
     ports:
       - "5001:5001"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
-      ConnectionStrings__DefaultConnection: Server=db,1433;Database=EncoraOneGrievanceDB;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True;
+      # PostgreSQL connection string
+      ConnectionStrings__DefaultConnection: Host=db;Port=5432;Database=EncoraOneGrievanceDB;Username=sa;Password=${SA_PASSWORD};
       AllowedOrigins: http://localhost:5173
     depends_on:
       - db
@@ -29,10 +31,11 @@ services:
   migrator:
     build:
       context: ./migrator
+    container_name: grievance_migrator
     env_file:
       - .env
     environment:
-      ConnectionStrings__DefaultConnection: Server=db,1433;Database=EncoraOneGrievanceDB;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True;
+      ConnectionStrings__DefaultConnection: Host=db;Port=5432;Database=EncoraOneGrievanceDB;Username=sa;Password=${SA_PASSWORD};
     volumes:
       - ./.:/app
       - ./scripts:/scripts

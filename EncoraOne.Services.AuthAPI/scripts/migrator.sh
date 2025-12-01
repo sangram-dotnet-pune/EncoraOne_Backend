@@ -1,29 +1,40 @@
 #!/usr/bin/env bash
 set -e
 
-echo "Waiting for SQL Server..."
-sleep 20
+echo "Waiting for PostgreSQL..."
+sleep 15
 
-# Ensure dotnet-ef is available
+# Ensure dotnet-ef exists
 if ! command -v dotnet-ef >/dev/null 2>&1; then
-	echo "dotnet-ef not found — installing global tool..."
-	dotnet tool install --global dotnet-ef || dotnet tool update --global dotnet-ef
-	export PATH="$PATH:/root/.dotnet/tools"
+    echo "dotnet-ef not found — installing..."
+    dotnet tool install --global dotnet-ef || dotnet tool update --global dotnet-ef
+    export PATH="$PATH:/root/.dotnet/tools"
 fi
 
-echo "Running migrations..."
+echo "Checking if migrations already exist..."
 
-# Retry migrations a few times in case SQL Server is still starting
+MIGRATIONS_DIR="/app/Migrations"
+
+if [ ! -d "$MIGRATIONS_DIR" ] || [ -z "$(ls -A $MIGRATIONS_DIR 2>/dev/null)" ]; then
+    echo "No migrations found — creating InitialCreate migration..."
+    dotnet ef migrations add InitialCreate --project /app/Grievance.API.csproj --startup-project /app
+else
+    echo "Migrations already exist — skipping creation."
+fi
+
+echo "Applying migrations to database..."
+
+# Retry until PostgreSQL becomes ready
 max_attempts=10
 attempt=1
 until dotnet ef database update --project /app/Grievance.API.csproj --startup-project /app; do
-	if [ "$attempt" -ge "$max_attempts" ]; then
-		echo "Migrations failed after $attempt attempts." >&2
-		exit 1
-	fi
-	echo "Migration attempt $attempt failed — retrying in 5s..."
-	attempt=$((attempt+1))
-	sleep 5
+    if [ "$attempt" -ge "$max_attempts" ]; then
+        echo "Migration update failed after $attempt attempts." >&2
+        exit 1
+    fi
+    echo "Attempt $attempt failed — retrying in 5 seconds..."
+    attempt=$((attempt+1))
+    sleep 5
 done
 
-echo "Migrations completed."
+echo "Database migrations completed successfully!"
